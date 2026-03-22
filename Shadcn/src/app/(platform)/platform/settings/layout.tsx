@@ -14,6 +14,7 @@ const navItems = [
   { title: 'Waluty',      href: '/platform/settings/currencies' },
   { title: 'Język',       href: '/platform/settings/language' },
   { title: 'Request Flow',href: '/platform/settings/request-flow' },
+  { title: 'Sales Track', href: '/platform/settings/sales-track' },
 ]
 
 interface Props {

@@ -540,3 +540,5 @@ export const demoDashboardStats = {
 // ─── Helper ───────────────────────────────────────────────────────────────────
 
 export const isDemoMode = process.env.NEXT_PUBLIC_DEMO_MODE === "true"
+// SalesTrack Demo Data (re-exported)
+export * from "./sales-data"

@@ -10,7 +10,6 @@ import {
   CalendarDays,
   Headphones,
   LayoutDashboard,
-  Settings,
   FileText,
   CheckSquare,
   Calendar,
@@ -24,6 +23,10 @@ import {
   Book,
   MapPin,
   ListChecks,
+  MessageSquare,
+  Megaphone,
+  LineChart,
+  PieChart,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import {
@@ -62,11 +65,13 @@ const MODULE_NAV: Record<ModuleKey | "platform", NavItem[]> = {
   ],
   sales_track: [
     { title: "Dashboard", href: "/platform/sales-track", icon: LayoutDashboard },
-    { title: "Clients", href: "/platform/sales-track/clients", icon: Building2 },
-    { title: "Opportunities", href: "/platform/sales-track/opportunities", icon: Target },
-    { title: "Interactions", href: "/platform/sales-track/interactions", icon: Clock },
-    { title: "Campaigns", href: "/platform/sales-track/campaigns", icon: BarChart2 },
-    { title: "Forecast", href: "/platform/sales-track/forecast", icon: TrendingUp },
+    { title: "Klienci", href: "/platform/sales-track/clients", icon: Building2 },
+    { title: "Szanse", href: "/platform/sales-track/opportunities", icon: Target },
+    { title: "Interakcje", href: "/platform/sales-track/interactions", icon: MessageSquare },
+    { title: "Kalendarz", href: "/platform/sales-track/calendar", icon: Calendar },
+    { title: "Kampanie", href: "/platform/sales-track/campaigns", icon: Megaphone },
+    { title: "Prognoza", href: "/platform/sales-track/forecast", icon: LineChart },
+    { title: "Raporty", href: "/platform/sales-track/reports", icon: PieChart },
   ],
   project_hub: [
     { title: "Dashboard", href: "/platform/project-hub", icon: LayoutDashboard },
@@ -172,15 +177,7 @@ export function PlatformSidebar({
       </SidebarContent>
 
       <SidebarFooter className="border-t p-2">
-        <div className="flex items-center gap-2">
-          <ModuleSwitcher enabledModules={enabledModules} />
-          <SidebarMenuButton asChild>
-            <Link href="/platform/settings">
-              <Settings className="h-4 w-4" />
-              <span>Settings</span>
-            </Link>
-          </SidebarMenuButton>
-        </div>
+        <ModuleSwitcher enabledModules={enabledModules} />
       </SidebarFooter>
       <SidebarRail />
     </Sidebar>

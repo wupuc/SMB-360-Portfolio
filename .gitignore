@@ -40,3 +40,9 @@ desktop.ini
 
 # Misc
 .turbo
+
+# Local MCP config (contains access tokens)
+.mcp.json
+
+# Supabase temp files
+supabase/.temp/
