@@ -54,26 +54,23 @@ export default async function PlatformLayout({ children }: Props) {
     redirect('/login')
   }
 
-  // Fetch user profile
+  // Fetch user profile first (need company_id)
   const { data: profile } = await supabase
     .from('users')
     .select('*')
     .eq('id', user.id)
     .single()
 
-  // Fetch company settings
+  // Fetch company + modules in parallel
   const companyId = profile?.company_id
-  const { data: company } = companyId
-    ? await supabase.from('companies').select('*').eq('id', companyId).single()
-    : { data: null }
-
-  // Fetch enabled modules
-  const { data: moduleConfigs } = companyId
-    ? await supabase
-        .from('module_config')
-        .select('module, is_enabled')
-        .eq('company_id', companyId)
-    : { data: [] }
+  const [{ data: company }, { data: moduleConfigs }] = await Promise.all([
+    companyId
+      ? supabase.from('companies').select('*').eq('id', companyId).single()
+      : Promise.resolve({ data: null }),
+    companyId
+      ? supabase.from('module_config').select('module, is_enabled').eq('company_id', companyId)
+      : Promise.resolve({ data: [] }),
+  ])
 
   const enabledModules = (moduleConfigs ?? [])
     .filter((m) => m.is_enabled)

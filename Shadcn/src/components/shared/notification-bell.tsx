@@ -154,7 +154,7 @@ export function NotificationBell({ userId }: NotificationBellProps) {
                       </p>
                     )}
                     <p className="text-muted-foreground mt-1 text-xs">
-                      {formatDistanceToNow(new Date(n.created_at), {
+                      {formatDistanceToNow(new Date(n.created_at ?? Date.now()), {
                         addSuffix: true,
                       })}
                     </p>

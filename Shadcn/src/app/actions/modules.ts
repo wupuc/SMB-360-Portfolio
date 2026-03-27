@@ -86,7 +86,7 @@ export async function toggleModule(
   revalidatePath("/platform/settings/modules")
   revalidatePath("/platform", "layout")
 
-  return { data, error: null }
+  return { data: data ? { module: data.module, is_enabled: data.is_enabled ?? false } : null, error: null }
 }
 
 export { MODULE_KEYS }

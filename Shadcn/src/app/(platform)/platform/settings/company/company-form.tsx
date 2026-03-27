@@ -78,11 +78,11 @@ export function CompanyForm({ company }: Props) {
     resolver: zodResolver(formSchema),
     defaultValues: {
       name: company.name,
-      brand_color: company.brand_color,
+      brand_color: company.brand_color ?? "",
       email_sender_name: company.email_sender_name ?? "",
       email_sender_address: company.email_sender_address ?? "",
-      timezone: company.timezone,
-      locale: company.locale,
+      timezone: company.timezone ?? "",
+      locale: company.locale ?? "",
     },
   })
 

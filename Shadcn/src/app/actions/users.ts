@@ -136,7 +136,7 @@ export async function toggleUserActive(
 
   revalidatePath("/platform/settings/users")
 
-  return { data, error: null }
+  return { data: data ? { id: data.id, is_active: data.is_active ?? false } : null, error: null }
 }
 
 const inviteUserSchema = z.object({

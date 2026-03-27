@@ -1,6 +1,4 @@
-// Auto-generated types from Supabase schema.
-// Regenerate with: supabase gen types typescript --local > src/types/database.types.ts
-// This is a placeholder until the Supabase CLI is run against the local schema.
+// Auto-generated from Supabase — regenerate with mcp__supabase__generate_typescript_types
 
 export type Json =
   | string
@@ -10,320 +8,275 @@ export type Json =
   | { [key: string]: Json | undefined }
   | Json[]
 
-export type UserRole = 'super_admin' | 'admin' | 'hr' | 'manager' | 'employee'
-export type ModuleKey =
-  | 'request_flow'
-  | 'sales_track'
-  | 'project_hub'
-  | 'people_hub'
-  | 'book_it'
-  | 'helpdesk'
-
-export interface Database {
+export type Database = {
+  __InternalSupabase: {
+    PostgrestVersion: "14.4"
+  }
   public: {
     Tables: {
-      companies: {
-        Row: {
-          id: string
-          name: string
-          logo_url: string | null
-          login_background_url: string | null
-          brand_color: string
-          email_sender_name: string | null
-          email_sender_address: string | null
-          timezone: string
-          locale: string
-          created_at: string
-          updated_at: string
-        }
-        Insert: {
-          id?: string
-          name: string
-          logo_url?: string | null
-          login_background_url?: string | null
-          brand_color?: string
-          email_sender_name?: string | null
-          email_sender_address?: string | null
-          timezone?: string
-          locale?: string
-        }
-        Update: Partial<Database['public']['Tables']['companies']['Insert']>
-        Relationships: []
-      }
-      users: {
-        Row: {
-          id: string
-          company_id: string | null
-          first_name: string
-          last_name: string
-          email: string
-          avatar_url: string | null
-          role: UserRole
-          department_id: string | null
-          manager_id: string | null
-          is_active: boolean
-          locale_override: string | null
-          created_at: string
-          updated_at: string
-        }
-        Insert: {
-          id: string
-          company_id?: string | null
-          first_name?: string
-          last_name?: string
-          email?: string
-          avatar_url?: string | null
-          role?: UserRole
-          department_id?: string | null
-          manager_id?: string | null
-          is_active?: boolean
-          locale_override?: string | null
-        }
-        Update: Partial<Database['public']['Tables']['users']['Insert']>
-        Relationships: []
-      }
-      departments: {
-        Row: {
-          id: string
-          company_id: string
-          name: string
-          parent_id: string | null
-          head_user_id: string | null
-          created_at: string
-        }
-        Insert: {
-          id?: string
-          company_id: string
-          name: string
-          parent_id?: string | null
-          head_user_id?: string | null
-        }
-        Update: Partial<Database['public']['Tables']['departments']['Insert']>
-        Relationships: []
-      }
-      teams: {
-        Row: {
-          id: string
-          company_id: string
-          name: string
-          description: string | null
-          created_at: string
-        }
-        Insert: {
-          id?: string
-          company_id: string
-          name: string
-          description?: string | null
-        }
-        Update: Partial<Database['public']['Tables']['teams']['Insert']>
-        Relationships: []
-      }
-      team_members: {
-        Row: {
-          team_id: string
-          user_id: string
-          role: 'member' | 'lead'
-        }
-        Insert: {
-          team_id: string
-          user_id: string
-          role?: 'member' | 'lead'
-        }
-        Update: Partial<Database['public']['Tables']['team_members']['Insert']>
-        Relationships: []
-      }
-      notifications: {
-        Row: {
-          id: string
-          company_id: string
-          user_id: string
-          title: string
-          body: string | null
-          type: string
-          source_app: string | null
-          source_id: string | null
-          source_url: string | null
-          is_read: boolean
-          created_at: string
-        }
-        Insert: {
-          id?: string
-          company_id: string
-          user_id: string
-          title: string
-          body?: string | null
-          type: string
-          source_app?: string | null
-          source_id?: string | null
-          source_url?: string | null
-          is_read?: boolean
-        }
-        Update: Partial<Database['public']['Tables']['notifications']['Insert']>
-        Relationships: []
-      }
-      files: {
-        Row: {
-          id: string
-          company_id: string
-          uploaded_by: string | null
-          name: string
-          storage_path: string
-          mime_type: string | null
-          size_bytes: number | null
-          source_app: string | null
-          source_id: string | null
-          created_at: string
-        }
-        Insert: {
-          id?: string
-          company_id: string
-          uploaded_by?: string | null
-          name: string
-          storage_path: string
-          mime_type?: string | null
-          size_bytes?: number | null
-          source_app?: string | null
-          source_id?: string | null
-        }
-        Update: Partial<Database['public']['Tables']['files']['Insert']>
-        Relationships: []
-      }
       announcements: {
         Row: {
-          id: string
-          company_id: string
-          title: string
-          body: string | null
-          author_id: string | null
-          is_pinned: boolean
-          published_at: string | null
-          expires_at: string | null
-          created_at: string
+          author_id: string | null; body: string | null; company_id: string
+          created_at: string | null; expires_at: string | null; id: string
+          is_pinned: boolean | null; published_at: string | null; title: string
         }
         Insert: {
-          id?: string
-          company_id: string
-          title: string
-          body?: string | null
-          author_id?: string | null
-          is_pinned?: boolean
-          published_at?: string | null
-          expires_at?: string | null
+          author_id?: string | null; body?: string | null; company_id: string
+          created_at?: string | null; expires_at?: string | null; id?: string
+          is_pinned?: boolean | null; published_at?: string | null; title: string
         }
-        Update: Partial<Database['public']['Tables']['announcements']['Insert']>
-        Relationships: []
-      }
-      module_config: {
-        Row: {
-          company_id: string
-          module: ModuleKey
-          is_enabled: boolean
-          config: Json
-        }
-        Insert: {
-          company_id: string
-          module: ModuleKey
-          is_enabled?: boolean
-          config?: Json
-        }
-        Update: Partial<Database['public']['Tables']['module_config']['Insert']>
-        Relationships: []
-      }
-      currencies: {
-        Row: {
-          id: string
-          company_id: string
-          code: string
-          name: string
-          symbol: string
-          exchange_rate: number
-          is_base: boolean
-          is_active: boolean
-        }
-        Insert: {
-          id?: string
-          company_id: string
-          code: string
-          name: string
-          symbol: string
-          exchange_rate?: number
-          is_base?: boolean
-          is_active?: boolean
-        }
-        Update: Partial<Database['public']['Tables']['currencies']['Insert']>
+        Update: Partial<Database["public"]["Tables"]["announcements"]["Insert"]>
         Relationships: []
       }
       audit_log: {
         Row: {
-          id: string
-          company_id: string | null
+          action: string; company_id: string | null; created_at: string | null
+          id: string; ip_address: string | null; new_values: Json | null
+          old_values: Json | null; record_id: string | null; table_name: string
           user_id: string | null
-          action: string
-          table_name: string
-          record_id: string | null
-          old_values: Json | null
-          new_values: Json | null
-          ip_address: string | null
-          created_at: string
         }
-        Insert: {
-          id?: string
-          company_id?: string | null
-          user_id?: string | null
-          action: string
-          table_name: string
-          record_id?: string | null
-          old_values?: Json | null
-          new_values?: Json | null
-          ip_address?: string | null
+        Insert: Partial<Database["public"]["Tables"]["audit_log"]["Row"]> & { action: string; table_name: string }
+        Update: Partial<Database["public"]["Tables"]["audit_log"]["Row"]>
+        Relationships: []
+      }
+      campaigns: {
+        Row: {
+          budget: number | null; company_id: string | null; created_at: string | null
+          currency_id: string | null; description: string | null; end_date: string | null
+          goal: string | null; id: string; name: string; owner_id: string | null
+          start_date: string | null; status: string | null; type: string
         }
-        Update: never
+        Insert: Partial<Database["public"]["Tables"]["campaigns"]["Row"]> & { name: string; type: string }
+        Update: Partial<Database["public"]["Tables"]["campaigns"]["Row"]>
+        Relationships: []
+      }
+      client_contacts: {
+        Row: {
+          client_id: string | null; created_at: string | null; email: string | null
+          first_name: string; id: string; is_primary: boolean | null
+          last_name: string; notes: string | null; phone: string | null; role: string | null
+        }
+        Insert: Partial<Database["public"]["Tables"]["client_contacts"]["Row"]> & { first_name: string; last_name: string }
+        Update: Partial<Database["public"]["Tables"]["client_contacts"]["Row"]>
+        Relationships: []
+      }
+      clients: {
+        Row: {
+          address: string | null; assigned_to: string | null; city: string | null
+          company_id: string | null; country: string | null; created_at: string | null
+          id: string; industry: string | null; is_active: boolean | null
+          lead_score: number | null; name: string; notes: string | null
+          phone: string | null; team_id: string | null; type: string | null
+          updated_at: string | null; website: string | null
+        }
+        Insert: Partial<Database["public"]["Tables"]["clients"]["Row"]> & { name: string }
+        Update: Partial<Database["public"]["Tables"]["clients"]["Row"]>
+        Relationships: []
+      }
+      close_reasons: {
+        Row: { company_id: string | null; id: string; is_active: boolean | null; name: string; type: string }
+        Insert: Partial<Database["public"]["Tables"]["close_reasons"]["Row"]> & { name: string; type: string }
+        Update: Partial<Database["public"]["Tables"]["close_reasons"]["Row"]>
+        Relationships: []
+      }
+      companies: {
+        Row: {
+          brand_color: string | null; created_at: string | null
+          email_sender_address: string | null; email_sender_name: string | null
+          id: string; locale: string | null; login_background_url: string | null
+          logo_url: string | null; name: string; timezone: string | null; updated_at: string | null
+        }
+        Insert: Partial<Database["public"]["Tables"]["companies"]["Row"]> & { name: string }
+        Update: Partial<Database["public"]["Tables"]["companies"]["Row"]>
+        Relationships: []
+      }
+      contact_segments: {
+        Row: {
+          company_id: string | null; created_at: string | null; created_by: string | null
+          description: string | null; filter_criteria: Json; id: string
+          is_shared: boolean | null; name: string
+        }
+        Insert: Partial<Database["public"]["Tables"]["contact_segments"]["Row"]> & { name: string }
+        Update: Partial<Database["public"]["Tables"]["contact_segments"]["Row"]>
+        Relationships: []
+      }
+      currencies: {
+        Row: {
+          code: string; company_id: string; exchange_rate: number | null; id: string
+          is_active: boolean | null; is_base: boolean | null; name: string; symbol: string
+        }
+        Insert: Partial<Database["public"]["Tables"]["currencies"]["Row"]> & { code: string; company_id: string; name: string; symbol: string }
+        Update: Partial<Database["public"]["Tables"]["currencies"]["Row"]>
+        Relationships: []
+      }
+      departments: {
+        Row: {
+          company_id: string; created_at: string | null; head_user_id: string | null
+          id: string; name: string; parent_id: string | null
+        }
+        Insert: Partial<Database["public"]["Tables"]["departments"]["Row"]> & { company_id: string; name: string }
+        Update: Partial<Database["public"]["Tables"]["departments"]["Row"]>
+        Relationships: []
+      }
+      email_templates: {
+        Row: {
+          body: string; company_id: string | null; created_at: string | null
+          created_by: string | null; id: string; is_shared: boolean | null
+          name: string; subject: string
+        }
+        Insert: Partial<Database["public"]["Tables"]["email_templates"]["Row"]> & { body: string; name: string; subject: string }
+        Update: Partial<Database["public"]["Tables"]["email_templates"]["Row"]>
+        Relationships: []
+      }
+      files: {
+        Row: {
+          company_id: string; created_at: string | null; id: string
+          mime_type: string | null; name: string; size_bytes: number | null
+          source_app: string | null; source_id: string | null
+          storage_path: string; uploaded_by: string | null
+        }
+        Insert: Partial<Database["public"]["Tables"]["files"]["Row"]> & { company_id: string; name: string; storage_path: string }
+        Update: Partial<Database["public"]["Tables"]["files"]["Row"]>
+        Relationships: []
+      }
+      interactions: {
+        Row: {
+          assigned_to: string | null; campaign_id: string | null; client_id: string | null
+          company_id: string | null; completed_at: string | null; created_at: string | null
+          created_by: string | null; description: string | null; email_subject: string | null
+          email_to: string | null; id: string; opportunity_id: string | null
+          priority: string | null; scheduled_at: string | null; status: string | null
+          title: string; type: string; updated_at: string | null
+        }
+        Insert: Partial<Database["public"]["Tables"]["interactions"]["Row"]> & { title: string; type: string }
+        Update: Partial<Database["public"]["Tables"]["interactions"]["Row"]>
+        Relationships: []
+      }
+      module_config: {
+        Row: { company_id: string; config: Json | null; is_enabled: boolean | null; module: string }
+        Insert: Partial<Database["public"]["Tables"]["module_config"]["Row"]> & { company_id: string; module: string }
+        Update: Partial<Database["public"]["Tables"]["module_config"]["Row"]>
+        Relationships: []
+      }
+      notifications: {
+        Row: {
+          body: string | null; company_id: string; created_at: string | null; id: string
+          is_read: boolean | null; source_app: string | null; source_id: string | null
+          source_url: string | null; title: string; type: string; user_id: string
+        }
+        Insert: Partial<Database["public"]["Tables"]["notifications"]["Row"]> & { company_id: string; title: string; type: string; user_id: string }
+        Update: Partial<Database["public"]["Tables"]["notifications"]["Row"]>
+        Relationships: []
+      }
+      opportunities: {
+        Row: {
+          actual_close_date: string | null; client_id: string | null; close_reason: string | null
+          company_id: string | null; created_at: string | null; currency_id: string | null
+          estimated_value: number | null; expected_close_date: string | null; id: string
+          inactivity_flag: string | null; last_activity_at: string | null; name: string
+          notes: string | null; owner_id: string | null; probability: number | null
+          stage_id: string | null; team_id: string | null; updated_at: string | null
+        }
+        Insert: Partial<Database["public"]["Tables"]["opportunities"]["Row"]> & { name: string }
+        Update: Partial<Database["public"]["Tables"]["opportunities"]["Row"]>
+        Relationships: []
+      }
+      opportunity_products: {
+        Row: {
+          discount_percent: number | null; opportunity_id: string; product_id: string
+          quantity: number | null; unit_price: number | null
+        }
+        Insert: Partial<Database["public"]["Tables"]["opportunity_products"]["Row"]> & { opportunity_id: string; product_id: string }
+        Update: Partial<Database["public"]["Tables"]["opportunity_products"]["Row"]>
+        Relationships: []
+      }
+      pipeline_stages: {
+        Row: {
+          color: string | null; company_id: string | null; id: string
+          is_active: boolean | null; name: string; probability_default: number | null
+          stage_order: number; system_flag: string
+        }
+        Insert: Partial<Database["public"]["Tables"]["pipeline_stages"]["Row"]> & { name: string; stage_order: number; system_flag: string }
+        Update: Partial<Database["public"]["Tables"]["pipeline_stages"]["Row"]>
+        Relationships: []
+      }
+      products: {
+        Row: {
+          category: string | null; company_id: string | null; created_at: string | null
+          currency_id: string | null; description: string | null; id: string
+          is_active: boolean | null; name: string; price: number | null; sku: string | null
+        }
+        Insert: Partial<Database["public"]["Tables"]["products"]["Row"]> & { name: string }
+        Update: Partial<Database["public"]["Tables"]["products"]["Row"]>
+        Relationships: []
+      }
+      team_members: {
+        Row: { role: string | null; team_id: string; user_id: string }
+        Insert: Partial<Database["public"]["Tables"]["team_members"]["Row"]> & { team_id: string; user_id: string }
+        Update: Partial<Database["public"]["Tables"]["team_members"]["Row"]>
+        Relationships: []
+      }
+      teams: {
+        Row: { company_id: string; created_at: string | null; description: string | null; id: string; name: string }
+        Insert: Partial<Database["public"]["Tables"]["teams"]["Row"]> & { company_id: string; name: string }
+        Update: Partial<Database["public"]["Tables"]["teams"]["Row"]>
+        Relationships: []
+      }
+      users: {
+        Row: {
+          avatar_url: string | null; company_id: string | null; created_at: string | null
+          department_id: string | null; email: string; first_name: string; id: string
+          is_active: boolean | null; last_name: string; locale_override: string | null
+          manager_id: string | null; role: string; updated_at: string | null
+        }
+        Insert: Partial<Database["public"]["Tables"]["users"]["Row"]> & { id: string }
+        Update: Partial<Database["public"]["Tables"]["users"]["Row"]>
         Relationships: []
       }
     }
     Views: {
       employee_profiles_safe: {
         Row: {
-          user_id: string | null
-          company_id: string | null
-          date_of_birth: string | null
-          job_title: string | null
-          contract_type: string | null
-          start_date: string | null
-          end_date: string | null
-          employment_status: string | null
-          salary_amount: number | null
-          salary_band: string | null
-        }
-        Insert: {
-          user_id?: string | null
-        }
-        Update: {
-          user_id?: string | null
+          id: string | null; first_name: string | null; last_name: string | null
+          email: string | null; role: string | null; department_id: string | null
+          company_id: string | null; avatar_url: string | null; is_active: boolean | null
         }
         Relationships: []
       }
     }
-    Functions: Record<string, {
-      Args: Record<string, unknown>
-      Returns: unknown
-    }>
-    Enums: {
-      user_role: UserRole
-      module_key: ModuleKey
+    Functions: {
+      get_my_company_id: { Args: never; Returns: string }
+      get_my_role: { Args: never; Returns: string }
     }
+    Enums: Record<string, never>
     CompositeTypes: Record<string, never>
   }
 }
 
-// Convenience type aliases
-export type Company = Database['public']['Tables']['companies']['Row']
-export type User = Database['public']['Tables']['users']['Row']
-export type Department = Database['public']['Tables']['departments']['Row']
-export type Team = Database['public']['Tables']['teams']['Row']
-export type TeamMember = Database['public']['Tables']['team_members']['Row']
-export type Notification = Database['public']['Tables']['notifications']['Row']
-export type FileRecord = Database['public']['Tables']['files']['Row']
-export type Announcement = Database['public']['Tables']['announcements']['Row']
-export type ModuleConfig = Database['public']['Tables']['module_config']['Row']
-export type Currency = Database['public']['Tables']['currencies']['Row']
+type DatabaseWithoutInternals = Omit<Database, "__InternalSupabase">
+type DefaultSchema = DatabaseWithoutInternals[Extract<keyof Database, "public">]
+
+export type Tables<
+  T extends keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
+> = (DefaultSchema["Tables"] & DefaultSchema["Views"])[T] extends { Row: infer R } ? R : never
+
+export type TablesInsert<T extends keyof DefaultSchema["Tables"]> =
+  DefaultSchema["Tables"][T] extends { Insert: infer I } ? I : never
+
+export type TablesUpdate<T extends keyof DefaultSchema["Tables"]> =
+  DefaultSchema["Tables"][T] extends { Update: infer U } ? U : never
+
+export type Enums<T extends keyof DefaultSchema["Enums"]> = DefaultSchema["Enums"][T]
+
+// Aliases used across the codebase
+export type ModuleKey = string
+export type UserRole = string
+
+// Named row aliases for convenience
+export type Company = Tables<"companies">
+export type Currency = Tables<"currencies">
+export type Department = Tables<"departments">
+export type User = Tables<"users">
+export type Notification = Tables<"notifications">
+
+export const Constants = { public: { Enums: {} } } as const

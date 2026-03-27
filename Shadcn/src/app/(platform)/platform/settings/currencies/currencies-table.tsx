@@ -69,7 +69,7 @@ export function CurrenciesTable({ currencies }: Props) {
                 <TableCell>{currency.name}</TableCell>
                 <TableCell className="font-mono">{currency.symbol}</TableCell>
                 <TableCell className="font-mono">
-                  {currency.exchange_rate.toFixed(4)}
+                  {(currency.exchange_rate ?? 1).toFixed(4)}
                 </TableCell>
                 <TableCell>
                   {currency.is_base && (
