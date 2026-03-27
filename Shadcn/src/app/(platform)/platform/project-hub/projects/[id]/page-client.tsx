@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useTransition } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -43,7 +43,9 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { useToast } from "@/hooks/use-toast"
-import { Plus, CheckCircle2, Circle } from "lucide-react"
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from "recharts"
+import { Plus, CheckCircle2, Circle, Play, Square, ChevronDown, ChevronRight, ArrowRight, ArrowLeft } from "lucide-react"
+import { startSprint, closeSprint, createSprint, moveTaskToSprint } from "@/app/actions/projecthub"
 import { cn } from "@/lib/utils"
 import type { Project, Task, Member, Sprint, Milestone } from "@/lib/supabase/projecthub-server"
 
@@ -602,59 +604,345 @@ function KanbanTab({ tasks, sprints, onTaskClick, onTaskAdd }: KanbanTabProps) {
 interface SprintsTabProps {
   sprints: Sprint[]
   tasks: Task[]
+  projectId: string
+  onSprintsChange: (s: Sprint[]) => void
+  onTasksChange: (t: Task[]) => void
 }
 
-function SprintsTab({ sprints, tasks }: SprintsTabProps) {
+function SprintsTab({ sprints, tasks, projectId, onSprintsChange, onTasksChange }: SprintsTabProps) {
   const { toast } = useToast()
+  const [isPending, startTransition] = useTransition()
+  const [expandedSprints, setExpandedSprints] = useState<Record<string, boolean>>({})
+  const [showBacklog, setShowBacklog] = useState(true)
+  const [showAddSprint, setShowAddSprint] = useState(false)
+  const [addSprintForm, setAddSprintForm] = useState({ name: "", startDate: "", endDate: "", goal: "" })
+  const [movingTaskId, setMovingTaskId] = useState<string | null>(null)
+
+  const backlogTasks = tasks.filter((t) => !t.sprint_id && t.status !== "done" && t.status !== "cancelled")
+  const hasActiveSprint = sprints.some((s) => s.status === "active")
+
+  // Velocity chart data
+  const velocityData = sprints
+    .filter((s) => s.status !== "planning")
+    .map((s) => {
+      const st = tasks.filter((t) => t.sprint_id === s.id)
+      return {
+        name: s.name.length > 12 ? s.name.slice(0, 12) + "…" : s.name,
+        Zaplanowane: st.length,
+        Ukończone: st.filter((t) => t.status === "done").length,
+      }
+    })
+
+  function toggleExpand(id: string) {
+    setExpandedSprints((prev) => ({ ...prev, [id]: !prev[id] }))
+  }
+
+  function handleStartSprint(sprint: Sprint) {
+    startTransition(async () => {
+      const result = await startSprint(sprint.id, projectId)
+      if (result.error) {
+        toast({ title: "Błąd", description: result.error, variant: "destructive" })
+      } else {
+        onSprintsChange(sprints.map((s) => s.id === sprint.id ? { ...s, status: "active" } : s))
+        toast({ title: `Sprint „${sprint.name}" uruchomiony` })
+      }
+    })
+  }
+
+  function handleCloseSprint(sprint: Sprint) {
+    startTransition(async () => {
+      const result = await closeSprint(sprint.id, projectId)
+      if (result.error) {
+        toast({ title: "Błąd", description: result.error, variant: "destructive" })
+      } else {
+        onSprintsChange(sprints.map((s) => s.id === sprint.id ? { ...s, status: "completed" } : s))
+        onTasksChange(tasks.map((t) =>
+          t.sprint_id === sprint.id && t.status !== "done" && t.status !== "cancelled"
+            ? { ...t, sprint_id: null }
+            : t
+        ))
+        toast({ title: `Sprint „${sprint.name}" zamknięty`, description: "Niezakończone zadania wróciły do backlogu." })
+      }
+    })
+  }
+
+  function handleMoveToSprint(taskId: string, sprintId: string | null) {
+    startTransition(async () => {
+      const result = await moveTaskToSprint(taskId, sprintId, projectId)
+      if (result.error) {
+        toast({ title: "Błąd", description: result.error, variant: "destructive" })
+      } else {
+        onTasksChange(tasks.map((t) => t.id === taskId ? { ...t, sprint_id: sprintId } : t))
+        setMovingTaskId(null)
+      }
+    })
+  }
+
+  function handleAddSprint() {
+    if (!addSprintForm.name || !addSprintForm.startDate || !addSprintForm.endDate) {
+      toast({ title: "Wypełnij nazwę i daty sprintu", variant: "destructive" })
+      return
+    }
+    startTransition(async () => {
+      const result = await createSprint({
+        projectId,
+        name: addSprintForm.name,
+        startDate: addSprintForm.startDate,
+        endDate: addSprintForm.endDate,
+        goal: addSprintForm.goal || undefined,
+      })
+      if (result.error) {
+        toast({ title: "Błąd", description: result.error, variant: "destructive" })
+      } else {
+        onSprintsChange([...sprints, result.data as Sprint])
+        setShowAddSprint(false)
+        setAddSprintForm({ name: "", startDate: "", endDate: "", goal: "" })
+        toast({ title: "Sprint dodany" })
+      }
+    })
+  }
 
   return (
-    <div className="space-y-4">
-      <div className="flex justify-end">
-        <Button size="sm" variant="outline" onClick={() => toast({ title: "Wkrótce dostępne" })}>
-          <Plus className="h-4 w-4 mr-2" />
-          Dodaj sprint
+    <div className="space-y-6">
+
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
+          {sprints.length} sprintów · {backlogTasks.length} zadań w backlogu
+        </h3>
+        <Button size="sm" variant="outline" onClick={() => setShowAddSprint(true)}>
+          <Plus className="h-4 w-4 mr-1.5" />
+          Nowy sprint
         </Button>
       </div>
-      {sprints.length === 0 && (
-        <p className="text-sm text-muted-foreground py-8 text-center">Brak sprintów</p>
+
+      {/* Add Sprint Dialog */}
+      {showAddSprint && (
+        <Card className="border-dashed">
+          <CardContent className="pt-4 space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="col-span-2">
+                <Label className="text-xs">Nazwa sprintu *</Label>
+                <Input
+                  placeholder="np. Sprint 3 — Integracja"
+                  value={addSprintForm.name}
+                  onChange={(e) => setAddSprintForm((f) => ({ ...f, name: e.target.value }))}
+                />
+              </div>
+              <div>
+                <Label className="text-xs">Data rozpoczęcia *</Label>
+                <Input type="date" value={addSprintForm.startDate}
+                  onChange={(e) => setAddSprintForm((f) => ({ ...f, startDate: e.target.value }))} />
+              </div>
+              <div>
+                <Label className="text-xs">Data zakończenia *</Label>
+                <Input type="date" value={addSprintForm.endDate}
+                  onChange={(e) => setAddSprintForm((f) => ({ ...f, endDate: e.target.value }))} />
+              </div>
+              <div className="col-span-2">
+                <Label className="text-xs">Cel sprintu</Label>
+                <Input placeholder="Co chcemy osiągnąć w tym sprincie?"
+                  value={addSprintForm.goal}
+                  onChange={(e) => setAddSprintForm((f) => ({ ...f, goal: e.target.value }))} />
+              </div>
+            </div>
+            <div className="flex gap-2 justify-end">
+              <Button size="sm" variant="ghost" onClick={() => setShowAddSprint(false)}>Anuluj</Button>
+              <Button size="sm" onClick={handleAddSprint} disabled={isPending}>Dodaj sprint</Button>
+            </div>
+          </CardContent>
+        </Card>
       )}
-      <div className="space-y-4">
-        {sprints.map((sprint) => {
+
+      {/* Velocity chart — only if completed sprints exist */}
+      {velocityData.length > 0 && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium">Prędkość sprintów</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ResponsiveContainer width="100%" height={160}>
+              <BarChart data={velocityData} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
+                <XAxis dataKey="name" tick={{ fontSize: 11 }} />
+                <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
+                <Tooltip />
+                <Legend wrapperStyle={{ fontSize: 12 }} />
+                <Bar dataKey="Zaplanowane" fill="#94a3b8" radius={[3, 3, 0, 0]} />
+                <Bar dataKey="Ukończone"   fill="#6366f1" radius={[3, 3, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Sprints */}
+      {sprints.length === 0 && !showAddSprint && (
+        <p className="text-sm text-muted-foreground py-8 text-center">Brak sprintów — dodaj pierwszy sprint powyżej</p>
+      )}
+
+      <div className="space-y-3">
+        {[...sprints].sort((a, b) => {
+          const order = { active: 0, planning: 1, completed: 2 }
+          return (order[a.status as keyof typeof order] ?? 3) - (order[b.status as keyof typeof order] ?? 3)
+        }).map((sprint) => {
           const sprintTasks = tasks.filter((t) => t.sprint_id === sprint.id)
+          const doneCnt = sprintTasks.filter((t) => t.status === "done").length
+          const totalHours = sprintTasks.reduce((s, t) => s + (t.estimated_hours ?? 0), 0)
+          const CAPACITY = 40 // hours per sprint default
+          const capacityPct = Math.min(100, Math.round((totalHours / CAPACITY) * 100))
           const isActive = sprint.status === "active"
+          const isExpanded = expandedSprints[sprint.id] !== false // default open
+
           return (
-            <Card key={sprint.id} className={isActive ? "border-blue-300 bg-blue-50/50 dark:bg-blue-950/20" : ""}>
-              <CardHeader className="pb-2">
+            <Card key={sprint.id} className={cn(
+              "transition-colors",
+              isActive ? "border-blue-400 bg-blue-50/40 dark:bg-blue-950/20" : ""
+            )}>
+              <CardHeader className="pb-2 cursor-pointer" onClick={() => toggleExpand(sprint.id)}>
                 <div className="flex items-center justify-between gap-2">
-                  <CardTitle className="text-base">{sprint.name}</CardTitle>
-                  <span className={cn("inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium", SPRINT_STATUS_CLASS[sprint.status])}>
-                    {SPRINT_STATUS_LABEL[sprint.status] ?? sprint.status}
-                  </span>
+                  <div className="flex items-center gap-2 min-w-0">
+                    {isExpanded
+                      ? <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
+                      : <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+                    }
+                    <CardTitle className="text-sm font-semibold truncate">{sprint.name}</CardTitle>
+                    <span className={cn("inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium shrink-0", SPRINT_STATUS_CLASS[sprint.status])}>
+                      {SPRINT_STATUS_LABEL[sprint.status] ?? sprint.status}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0" onClick={(e) => e.stopPropagation()}>
+                    {sprint.status === "planning" && !hasActiveSprint && (
+                      <Button size="sm" variant="outline" className="h-7 text-xs text-green-700 border-green-300 hover:bg-green-50"
+                        disabled={isPending} onClick={() => handleStartSprint(sprint)}>
+                        <Play className="h-3 w-3 mr-1" />
+                        Uruchom
+                      </Button>
+                    )}
+                    {sprint.status === "active" && (
+                      <Button size="sm" variant="outline" className="h-7 text-xs text-orange-700 border-orange-300 hover:bg-orange-50"
+                        disabled={isPending} onClick={() => handleCloseSprint(sprint)}>
+                        <Square className="h-3 w-3 mr-1" />
+                        Zamknij sprint
+                      </Button>
+                    )}
+                    <span className="text-xs text-muted-foreground">{doneCnt}/{sprintTasks.length}</span>
+                  </div>
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  {sprint.start_date} – {sprint.end_date}
-                </p>
-                {sprint.goal && (
-                  <p className="text-sm text-muted-foreground mt-1">{sprint.goal}</p>
-                )}
+
+                <div className="pl-6 space-y-1">
+                  <p className="text-xs text-muted-foreground">{sprint.start_date} – {sprint.end_date}</p>
+                  {sprint.goal && <p className="text-xs text-muted-foreground italic">"{sprint.goal}"</p>}
+
+                  {/* Capacity bar */}
+                  {totalHours > 0 && (
+                    <div className="flex items-center gap-2">
+                      <div className="flex-1 h-1.5 rounded-full bg-muted overflow-hidden">
+                        <div
+                          className={cn("h-full rounded-full transition-all", capacityPct > 90 ? "bg-red-500" : capacityPct > 70 ? "bg-orange-400" : "bg-green-500")}
+                          style={{ width: `${capacityPct}%` }}
+                        />
+                      </div>
+                      <span className="text-xs text-muted-foreground shrink-0">{totalHours}h / {CAPACITY}h</span>
+                    </div>
+                  )}
+
+                  {/* Progress bar */}
+                  {sprintTasks.length > 0 && (
+                    <Progress value={sprintTasks.length > 0 ? Math.round((doneCnt / sprintTasks.length) * 100) : 0} className="h-1" />
+                  )}
+                </div>
               </CardHeader>
-              {sprintTasks.length > 0 && (
-                <CardContent>
-                  <ul className="space-y-1">
-                    {sprintTasks.map((task) => (
-                      <li key={task.id} className="flex items-center gap-2 text-sm">
-                        <span className={cn("inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium shrink-0", TASK_STATUS_CLASS[task.status])}>
-                          {TASK_STATUS_LABEL[task.status]}
-                        </span>
-                        <span className="truncate">{task.title}</span>
-                      </li>
-                    ))}
-                  </ul>
+
+              {isExpanded && (
+                <CardContent className="pt-0 pb-3">
+                  {sprintTasks.length === 0 ? (
+                    <p className="text-xs text-muted-foreground pl-6 py-2">Brak zadań w tym sprincie</p>
+                  ) : (
+                    <ul className="space-y-1 pl-6">
+                      {sprintTasks.map((task) => (
+                        <li key={task.id} className="flex items-center justify-between gap-2 text-sm py-1 border-b last:border-0">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className={cn("inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-xs font-medium", TASK_STATUS_CLASS[task.status])}>
+                              {TASK_STATUS_LABEL[task.status]}
+                            </span>
+                            <span className="truncate text-sm">{task.title}</span>
+                          </div>
+                          <Button
+                            size="sm" variant="ghost" className="h-6 px-2 text-xs text-muted-foreground shrink-0"
+                            disabled={isPending}
+                            onClick={() => handleMoveToSprint(task.id, null)}
+                            title="Przenieś do backlogu"
+                          >
+                            <ArrowLeft className="h-3 w-3" />
+                          </Button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
                 </CardContent>
               )}
             </Card>
           )
         })}
+      </div>
+
+      {/* Backlog */}
+      <div>
+        <button
+          className="flex items-center gap-2 text-sm font-medium mb-3 hover:text-foreground text-muted-foreground transition-colors"
+          onClick={() => setShowBacklog((v) => !v)}
+        >
+          {showBacklog ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+          Backlog
+          <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-xs font-medium">{backlogTasks.length}</span>
+        </button>
+
+        {showBacklog && (
+          <Card>
+            <CardContent className="py-3">
+              {backlogTasks.length === 0 ? (
+                <p className="text-xs text-muted-foreground text-center py-4">Backlog pusty — wszystkie zadania w sprintach</p>
+              ) : (
+                <ul className="space-y-1">
+                  {backlogTasks.map((task) => (
+                    <li key={task.id} className="flex items-center justify-between gap-2 py-1.5 border-b last:border-0">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className={cn("inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-xs font-medium", PRIORITY_CLASS[task.priority])}>
+                          {PRIORITY_LABEL[task.priority]}
+                        </span>
+                        <span className="truncate text-sm">{task.title}</span>
+                      </div>
+                      {/* Move to sprint dropdown */}
+                      {sprints.filter((s) => s.status !== "completed").length > 0 && (
+                        <div className="flex items-center gap-1 shrink-0">
+                          {movingTaskId === task.id ? (
+                            <>
+                              {sprints.filter((s) => s.status !== "completed").map((s) => (
+                                <Button key={s.id} size="sm" variant="outline" className="h-6 text-xs px-2"
+                                  disabled={isPending}
+                                  onClick={() => handleMoveToSprint(task.id, s.id)}>
+                                  {s.name.length > 14 ? s.name.slice(0, 14) + "…" : s.name}
+                                </Button>
+                              ))}
+                              <Button size="sm" variant="ghost" className="h-6 text-xs px-1"
+                                onClick={() => setMovingTaskId(null)}>✕</Button>
+                            </>
+                          ) : (
+                            <Button size="sm" variant="ghost" className="h-6 px-2 text-xs text-muted-foreground"
+                              onClick={() => setMovingTaskId(task.id)} title="Dodaj do sprintu">
+                              <ArrowRight className="h-3 w-3 mr-1" />
+                              Do sprintu
+                            </Button>
+                          )}
+                        </div>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </CardContent>
+          </Card>
+        )}
       </div>
     </div>
   )
@@ -777,7 +1065,7 @@ export function ProjectDetailClient({
   const [project] = useState<Project>(initialProject)
   const [tasks, setTasks] = useState<Task[]>(initialTasks)
   const [members] = useState<Member[]>(initialMembers)
-  const [sprints] = useState<Sprint[]>(initialSprints)
+  const [sprints, setSprints] = useState<Sprint[]>(initialSprints)
   const [milestones, setMilestones] = useState<Milestone[]>(initialMilestones)
   const [selectedTask, setSelectedTask] = useState<Task | null>(null)
 
@@ -867,7 +1155,13 @@ export function ProjectDetailClient({
         </TabsContent>
 
         <TabsContent value="sprints" className="mt-4">
-          <SprintsTab sprints={sprints} tasks={tasks} />
+          <SprintsTab
+            sprints={sprints}
+            tasks={tasks}
+            projectId={project.id}
+            onSprintsChange={setSprints}
+            onTasksChange={setTasks}
+          />
         </TabsContent>
 
         <TabsContent value="milestones" className="mt-4">

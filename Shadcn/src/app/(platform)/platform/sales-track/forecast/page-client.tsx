@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import React, { useState } from "react"
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from "recharts"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -211,8 +211,8 @@ export function ForecastPageClient({ initialOpportunities, initialStages, initia
               ) : Array.from(groups.entries()).map(([monthLabel, opps]) => {
                 const monthSubtotal = opps.reduce((s, o) => s + o.value * o.probability / 100, 0)
                 return (
-                  <>
-                    <TableRow key={`header-${monthLabel}`} className="bg-muted/40 hover:bg-muted/40">
+                  <React.Fragment key={monthLabel}>
+                    <TableRow className="bg-muted/40 hover:bg-muted/40">
                       <TableCell colSpan={5} className="py-2 px-4 font-semibold text-sm text-muted-foreground">{monthLabel}</TableCell>
                       <TableCell className="py-2 text-right font-semibold text-sm text-muted-foreground">{formatPLN(monthSubtotal)}</TableCell>
                       <TableCell />
@@ -238,7 +238,7 @@ export function ForecastPageClient({ initialOpportunities, initialStages, initia
                         </TableRow>
                       )
                     })}
-                  </>
+                  </React.Fragment>
                 )
               })}
             </TableBody>
