@@ -1,4 +1,5 @@
 import { isDemoMode } from "@/lib/demo/data"
+import { createClient } from "@/lib/supabase/server"
 import {
   fetchProjectById,
   fetchProjectTasks,
@@ -281,9 +282,14 @@ export default async function ProjectDetailPage({ params }: PageProps) {
         initialMembers={demoMembers}
         initialSprints={demoSprints}
         initialMilestones={demoMilestones}
+        companyId="demo-company-001"
       />
     )
   }
+
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  const { data: profile } = await supabase.from("users").select("company_id").eq("id", user!.id).single()
 
   const [project, tasks, members, sprints, milestones] = await Promise.all([
     fetchProjectById(id),
@@ -308,6 +314,7 @@ export default async function ProjectDetailPage({ params }: PageProps) {
       initialMembers={members}
       initialSprints={sprints}
       initialMilestones={milestones}
+      companyId={profile?.company_id ?? ""}
     />
   )
 }

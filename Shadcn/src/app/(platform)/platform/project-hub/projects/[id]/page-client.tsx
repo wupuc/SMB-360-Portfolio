@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useTransition } from "react"
+import { useState, useTransition, useEffect, useRef } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -45,7 +45,8 @@ import {
 import { useToast } from "@/hooks/use-toast"
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from "recharts"
 import { Plus, CheckCircle2, Circle, Play, Square, ChevronDown, ChevronRight, ArrowRight, ArrowLeft } from "lucide-react"
-import { startSprint, closeSprint, createSprint, moveTaskToSprint } from "@/app/actions/projecthub"
+import { startSprint, closeSprint, createSprint, moveTaskToSprint, addComment, createSubtask } from "@/app/actions/projecthub"
+import { createClient } from "@/lib/supabase/client"
 import { cn } from "@/lib/utils"
 import type { Project, Task, Member, Sprint, Milestone } from "@/lib/supabase/projecthub-server"
 
@@ -154,22 +155,67 @@ function AssigneeAvatars({ assignees }: { assignees: Task["assignees"] }) {
   )
 }
 
+// ─── Comment type ─────────────────────────────────────────────────────────────
+
+interface TaskComment {
+  id: string
+  task_id: string
+  author_id: string | null
+  body: string
+  created_at: string
+  author?: { first_name: string; last_name: string } | null
+}
+
 // ─── Task Detail Sheet ────────────────────────────────────────────────────────
 
 interface TaskSheetProps {
   task: Task | null
   sprints: Sprint[]
+  allTasks: Task[]
+  projectId: string
+  companyId: string
   onClose: () => void
   onUpdate: (updated: Task) => void
+  onSubtaskAdd: (subtask: Task) => void
 }
 
-function TaskDetailSheet({ task, sprints, onClose, onUpdate }: TaskSheetProps) {
+function TaskDetailSheet({ task, sprints, allTasks, projectId, companyId, onClose, onUpdate, onSubtaskAdd }: TaskSheetProps) {
+  const { toast } = useToast()
   const [local, setLocal] = useState<Task | null>(task)
+  const [comments, setComments] = useState<TaskComment[]>([])
+  const [commentsLoading, setCommentsLoading] = useState(false)
+  const [newComment, setNewComment] = useState("")
+  const [subtaskInput, setSubtaskInput] = useState("")
+  const [showSubtaskInput, setShowSubtaskInput] = useState(false)
+  const [isPending, startTransition] = useTransition()
+  const commentsEndRef = useRef<HTMLDivElement>(null)
 
-  // sync when task changes
+  // Sync local state when task changes
   if (task?.id !== local?.id) {
     setLocal(task)
+    setComments([])
+    setNewComment("")
+    setSubtaskInput("")
+    setShowSubtaskInput(false)
   }
+
+  // Fetch comments when task opens
+  useEffect(() => {
+    if (!task?.id) return
+    setCommentsLoading(true)
+    const supabase = createClient()
+    ;(supabase as any)
+      .from("task_comments")
+      .select("*, author:users(first_name, last_name)")
+      .eq("task_id", task.id)
+      .order("created_at", { ascending: true })
+      .then(({ data }: { data: TaskComment[] | null }) => {
+        setComments(data ?? [])
+        setCommentsLoading(false)
+      })
+  }, [task?.id])
+
+  const subtasks = allTasks.filter((t) => t.parent_task_id === local?.id)
 
   function handleStatusChange(status: string) {
     if (!local) return
@@ -185,31 +231,83 @@ function TaskDetailSheet({ task, sprints, onClose, onUpdate }: TaskSheetProps) {
     onUpdate(updated)
   }
 
+  function handleAddComment() {
+    if (!local || !newComment.trim()) return
+    startTransition(async () => {
+      const result = await addComment(local.id, newComment, projectId)
+      if (result.error) {
+        toast({ title: "Błąd", description: result.error, variant: "destructive" })
+      } else {
+        setComments((prev) => [...prev, result.data as TaskComment])
+        setNewComment("")
+        setTimeout(() => commentsEndRef.current?.scrollIntoView({ behavior: "smooth" }), 50)
+      }
+    })
+  }
+
+  function handleAddSubtask() {
+    if (!local || !subtaskInput.trim()) return
+    startTransition(async () => {
+      const result = await createSubtask(local.id, subtaskInput, projectId, companyId)
+      if (result.error) {
+        toast({ title: "Błąd", description: result.error, variant: "destructive" })
+      } else {
+        onSubtaskAdd(result.data as Task)
+        setSubtaskInput("")
+        setShowSubtaskInput(false)
+        toast({ title: "Podzadanie dodane" })
+      }
+    })
+  }
+
+  function formatCommentTime(iso: string) {
+    const d = new Date(iso)
+    return d.toLocaleDateString("pl-PL", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })
+  }
+
   return (
     <Sheet open={!!task} onOpenChange={(open) => { if (!open) onClose() }}>
-      <SheetContent className="w-full sm:max-w-lg overflow-y-auto">
+      <SheetContent className="w-full sm:max-w-lg overflow-y-auto flex flex-col gap-0 p-0">
         {local && (
-          <>
-            <SheetHeader>
-              <SheetTitle className="text-left pr-8">{local.title}</SheetTitle>
-            </SheetHeader>
-            <div className="mt-6 space-y-4">
+          <div className="flex flex-col h-full">
+            {/* Header */}
+            <div className="p-6 pb-4 border-b">
+              <SheetHeader>
+                <SheetTitle className="text-left pr-8 text-base leading-snug">{local.title}</SheetTitle>
+              </SheetHeader>
+              <div className="flex gap-2 mt-3 flex-wrap">
+                <span className={cn("inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium", TASK_STATUS_CLASS[local.status])}>
+                  {TASK_STATUS_LABEL[local.status]}
+                </span>
+                <span className={cn("inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium", PRIORITY_CLASS[local.priority])}>
+                  {PRIORITY_LABEL[local.priority]}
+                </span>
+                {local.due_date && (
+                  <span className={cn("inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-gray-100 text-gray-700",
+                    isOverdue(local.due_date) && local.status !== "done" ? "bg-red-100 text-red-700" : "")}>
+                    {local.due_date}
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* Scrollable body */}
+            <div className="flex-1 overflow-y-auto p-6 space-y-5">
+
+              {/* Description */}
               <div className="grid gap-1.5">
                 <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Opis</Label>
-                <Textarea
-                  rows={3}
-                  value={local.description ?? ""}
+                <Textarea rows={3} value={local.description ?? ""}
                   onChange={(e) => setLocal((t) => t ? { ...t, description: e.target.value } : t)}
-                  placeholder="Brak opisu…"
-                />
+                  placeholder="Brak opisu…" className="text-sm resize-none" />
               </div>
-              <div className="grid grid-cols-2 gap-4">
+
+              {/* Status + Priority */}
+              <div className="grid grid-cols-2 gap-3">
                 <div className="grid gap-1.5">
                   <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Status</Label>
                   <Select value={local.status} onValueChange={handleStatusChange}>
-                    <SelectTrigger className="h-8 text-sm">
-                      <SelectValue />
-                    </SelectTrigger>
+                    <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       {Object.entries(TASK_STATUS_LABEL).map(([val, label]) => (
                         <SelectItem key={val} value={val}>{label}</SelectItem>
@@ -220,9 +318,7 @@ function TaskDetailSheet({ task, sprints, onClose, onUpdate }: TaskSheetProps) {
                 <div className="grid gap-1.5">
                   <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Priorytet</Label>
                   <Select value={local.priority} onValueChange={handlePriorityChange}>
-                    <SelectTrigger className="h-8 text-sm">
-                      <SelectValue />
-                    </SelectTrigger>
+                    <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="low">Niski</SelectItem>
                       <SelectItem value="medium">Średni</SelectItem>
@@ -232,33 +328,23 @@ function TaskDetailSheet({ task, sprints, onClose, onUpdate }: TaskSheetProps) {
                   </Select>
                 </div>
               </div>
-              {local.due_date && (
-                <div>
-                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">Termin</p>
-                  <p className={cn("text-sm", isOverdue(local.due_date) && local.status !== "done" ? "text-red-600 font-medium" : "")}>
-                    {local.due_date}
-                  </p>
-                </div>
-              )}
+
+              {/* Sprint */}
               {sprints.length > 0 && (
                 <div className="grid gap-1.5">
                   <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Sprint</Label>
-                  <Select
-                    value={local.sprint_id ?? "none"}
-                    onValueChange={(v) => setLocal((t) => t ? { ...t, sprint_id: v === "none" ? null : v } : t)}
-                  >
-                    <SelectTrigger className="h-8 text-sm">
-                      <SelectValue placeholder="Brak sprintu" />
-                    </SelectTrigger>
+                  <Select value={local.sprint_id ?? "none"}
+                    onValueChange={(v) => setLocal((t) => t ? { ...t, sprint_id: v === "none" ? null : v } : t)}>
+                    <SelectTrigger className="h-8 text-sm"><SelectValue placeholder="Brak sprintu" /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="none">Brak sprintu</SelectItem>
-                      {sprints.map((s) => (
-                        <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
-                      ))}
+                      {sprints.map((s) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
                     </SelectContent>
                   </Select>
                 </div>
               )}
+
+              {/* Assignees */}
               {(local.assignees ?? []).length > 0 && (
                 <div>
                   <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">Przypisane osoby</p>
@@ -274,6 +360,8 @@ function TaskDetailSheet({ task, sprints, onClose, onUpdate }: TaskSheetProps) {
                   </div>
                 </div>
               )}
+
+              {/* Labels */}
               {(local.labels ?? []).length > 0 && (
                 <div>
                   <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">Etykiety</p>
@@ -284,8 +372,116 @@ function TaskDetailSheet({ task, sprints, onClose, onUpdate }: TaskSheetProps) {
                   </div>
                 </div>
               )}
+
+              {/* ── Subtasks ─────────────────────────────────────────── */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                    Podzadania {subtasks.length > 0 && <span className="ml-1 text-foreground">{subtasks.filter(t => t.status === "done").length}/{subtasks.length}</span>}
+                  </p>
+                  <Button size="sm" variant="ghost" className="h-6 text-xs px-2"
+                    onClick={() => setShowSubtaskInput((v) => !v)}>
+                    <Plus className="h-3 w-3 mr-1" />
+                    Dodaj
+                  </Button>
+                </div>
+
+                {subtasks.length > 0 && (
+                  <ul className="space-y-1 mb-2">
+                    {subtasks.map((sub) => (
+                      <li key={sub.id} className="flex items-center gap-2 text-sm py-1 px-2 rounded hover:bg-muted/50">
+                        <button
+                          className="shrink-0"
+                          onClick={() => onUpdate({ ...sub, status: sub.status === "done" ? "todo" : "done" })}
+                        >
+                          {sub.status === "done"
+                            ? <CheckCircle2 className="h-4 w-4 text-green-600" />
+                            : <Circle className="h-4 w-4 text-muted-foreground" />
+                          }
+                        </button>
+                        <span className={cn("flex-1 truncate", sub.status === "done" ? "line-through text-muted-foreground" : "")}>
+                          {sub.title}
+                        </span>
+                        <span className={cn("shrink-0 inline-flex items-center rounded-full px-1.5 py-0.5 text-xs font-medium", PRIORITY_CLASS[sub.priority])}>
+                          {PRIORITY_LABEL[sub.priority]}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+
+                {showSubtaskInput && (
+                  <div className="flex gap-2">
+                    <Input
+                      autoFocus
+                      placeholder="Tytuł podzadania…"
+                      value={subtaskInput}
+                      className="h-8 text-sm"
+                      onChange={(e) => setSubtaskInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") handleAddSubtask()
+                        if (e.key === "Escape") setShowSubtaskInput(false)
+                      }}
+                    />
+                    <Button size="sm" className="h-8 shrink-0" disabled={isPending} onClick={handleAddSubtask}>Dodaj</Button>
+                  </div>
+                )}
+              </div>
+
+              {/* ── Comments ─────────────────────────────────────────── */}
+              <div>
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-3">
+                  Komentarze {comments.length > 0 && `(${comments.length})`}
+                </p>
+
+                {commentsLoading ? (
+                  <p className="text-xs text-muted-foreground">Ładowanie…</p>
+                ) : comments.length === 0 ? (
+                  <p className="text-xs text-muted-foreground italic">Brak komentarzy</p>
+                ) : (
+                  <div className="space-y-3 mb-3">
+                    {comments.map((c) => (
+                      <div key={c.id} className="flex gap-2.5">
+                        <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-purple-100 text-purple-700 text-xs font-medium">
+                          {c.author ? initials(c.author.first_name, c.author.last_name) : "?"}
+                        </span>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-baseline gap-2">
+                            <span className="text-xs font-medium">
+                              {c.author ? `${c.author.first_name} ${c.author.last_name}` : "Użytkownik"}
+                            </span>
+                            <span className="text-xs text-muted-foreground">{formatCommentTime(c.created_at)}</span>
+                          </div>
+                          <p className="text-sm mt-0.5 whitespace-pre-wrap">{c.body}</p>
+                        </div>
+                      </div>
+                    ))}
+                    <div ref={commentsEndRef} />
+                  </div>
+                )}
+
+                {/* Add comment */}
+                <div className="flex gap-2 mt-2">
+                  <Textarea
+                    rows={2}
+                    placeholder="Napisz komentarz…"
+                    value={newComment}
+                    className="text-sm resize-none"
+                    onChange={(e) => setNewComment(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) handleAddComment()
+                    }}
+                  />
+                </div>
+                <Button size="sm" className="mt-2" disabled={isPending || !newComment.trim()}
+                  onClick={handleAddComment}>
+                  Wyślij komentarz
+                </Button>
+                <p className="text-xs text-muted-foreground mt-1">Ctrl+Enter aby wysłać</p>
+              </div>
+
             </div>
-          </>
+          </div>
         )}
       </SheetContent>
     </Sheet>
@@ -481,7 +677,17 @@ function TasksTab({ tasks, sprints, onTaskClick, onTaskAdd }: TasksTabProps) {
                 className="cursor-pointer"
                 onClick={() => onTaskClick(task)}
               >
-                <TableCell className="font-medium max-w-[200px] truncate">{task.title}</TableCell>
+                <TableCell className="max-w-[220px]">
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <span className="font-medium truncate text-sm">{task.title}</span>
+                    {tasks.filter((t) => t.parent_task_id === task.id).length > 0 && (
+                      <span className="shrink-0 inline-flex items-center rounded-full bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
+                        {tasks.filter((t) => t.parent_task_id === task.id && t.status === "done").length}/
+                        {tasks.filter((t) => t.parent_task_id === task.id).length}
+                      </span>
+                    )}
+                  </div>
+                </TableCell>
                 <TableCell>
                   <AssigneeAvatars assignees={task.assignees} />
                 </TableCell>
@@ -1053,6 +1259,7 @@ interface Props {
   initialMembers: Member[]
   initialSprints: Sprint[]
   initialMilestones: Milestone[]
+  companyId?: string
 }
 
 export function ProjectDetailClient({
@@ -1061,6 +1268,7 @@ export function ProjectDetailClient({
   initialMembers,
   initialSprints,
   initialMilestones,
+  companyId = "",
 }: Props) {
   const [project] = useState<Project>(initialProject)
   const [tasks, setTasks] = useState<Task[]>(initialTasks)
@@ -1177,8 +1385,12 @@ export function ProjectDetailClient({
       <TaskDetailSheet
         task={selectedTask}
         sprints={sprints}
+        allTasks={tasks}
+        projectId={project.id}
+        companyId={companyId}
         onClose={() => setSelectedTask(null)}
         onUpdate={handleTaskUpdate}
+        onSubtaskAdd={handleTaskAdd}
       />
     </div>
   )

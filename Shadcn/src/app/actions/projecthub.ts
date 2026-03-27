@@ -219,3 +219,54 @@ export async function createMilestone(projectId: string, name: string, dueDate: 
   revalidateProject(projectId)
   return { data, error: null }
 }
+
+// ─── Comment actions ───────────────────────────────────────────────────────────
+
+export async function addComment(taskId: string, body: string, projectId: string) {
+  if (!body.trim()) return { data: null, error: "Komentarz nie może być pusty" }
+
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { data: null, error: "Nie zalogowano" }
+
+  const { data, error } = await (supabase as any)
+    .from("task_comments")
+    .insert({ task_id: taskId, author_id: user.id, body: body.trim() })
+    .select("*, author:users(first_name, last_name)")
+    .single()
+
+  if (error) return { data: null, error: error.message }
+  return { data, error: null }
+}
+
+// ─── Subtask actions ───────────────────────────────────────────────────────────
+
+export async function createSubtask(
+  parentTaskId: string,
+  title: string,
+  projectId: string,
+  companyId: string,
+) {
+  if (!title.trim()) return { data: null, error: "Tytuł nie może być pusty" }
+
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+
+  const { data, error } = await (supabase as any)
+    .from("tasks")
+    .insert({
+      parent_task_id: parentTaskId,
+      project_id:     projectId,
+      company_id:     companyId,
+      title:          title.trim(),
+      status:         "todo",
+      priority:       "medium",
+      created_by:     user?.id ?? null,
+    })
+    .select()
+    .single()
+
+  if (error) return { data: null, error: error.message }
+  revalidateProject(projectId)
+  return { data, error: null }
+}
