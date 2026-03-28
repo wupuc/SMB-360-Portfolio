@@ -273,7 +273,16 @@ function TaskDetailSheet({ task, sprints, allTasks, projectId, companyId, onClos
             {/* Header */}
             <div className="p-6 pb-4 border-b">
               <SheetHeader>
-                <SheetTitle className="text-left pr-8 text-base leading-snug">{local.title}</SheetTitle>
+                <div className="flex items-start gap-2 pr-8">
+                  <SheetTitle className="text-left text-base leading-snug flex-1">{local.title}</SheetTitle>
+                  <a
+                    href={`/platform/project-hub/tasks/${local.id}`}
+                    className="shrink-0 text-muted-foreground hover:text-foreground transition-colors"
+                    title="Otwórz pełną stronę zadania"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg>
+                  </a>
+                </div>
               </SheetHeader>
               <div className="flex gap-2 mt-3 flex-wrap">
                 <span className={cn("inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium", TASK_STATUS_CLASS[local.status])}>
@@ -1251,6 +1260,347 @@ function MembersTab({ members }: MembersTabProps) {
   )
 }
 
+// ─── Gantt Tab ────────────────────────────────────────────────────────────────
+
+interface GanttTabProps {
+  project: Project
+  tasks: Task[]
+  sprints: Sprint[]
+  milestones: Milestone[]
+  onTaskClick: (task: Task) => void
+}
+
+type GanttRow =
+  | { kind: "sprint";    sprint: Sprint;    tasks: Task[] }
+  | { kind: "backlog";   tasks: Task[] }
+  | { kind: "milestone"; milestone: Milestone }
+
+const GANTT_PRIORITY_COLOR: Record<string, string> = {
+  urgent: "bg-red-500",
+  high:   "bg-orange-400",
+  medium: "bg-blue-400",
+  low:    "bg-gray-300",
+}
+
+const GANTT_STATUS_OPACITY: Record<string, string> = {
+  done:   "opacity-40",
+  cancelled: "opacity-30",
+}
+
+function ganttDate(dateStr: string | null | undefined, fallback: string): Date {
+  if (dateStr) return new Date(dateStr)
+  return new Date(fallback)
+}
+
+function clamp(v: number, lo: number, hi: number) { return Math.max(lo, Math.min(hi, v)) }
+
+function GanttBar({
+  start,
+  end,
+  rangeStart,
+  totalDays,
+  label,
+  colorClass,
+  opacityClass,
+  onClick,
+  title,
+}: {
+  start: Date; end: Date; rangeStart: Date; totalDays: number
+  label: string; colorClass: string; opacityClass?: string
+  onClick?: () => void; title?: string
+}) {
+  const dayMs = 86_400_000
+  const startOff = Math.max(0, (start.getTime() - rangeStart.getTime()) / dayMs)
+  const endOff   = Math.min(totalDays, (end.getTime()   - rangeStart.getTime()) / dayMs)
+  const left  = clamp((startOff / totalDays) * 100, 0, 100)
+  const width = clamp(((endOff - startOff) / totalDays) * 100, 0.5, 100 - left)
+
+  return (
+    <div
+      className={`absolute top-1/2 -translate-y-1/2 h-5 rounded cursor-pointer flex items-center px-1.5 text-[10px] text-white font-medium truncate select-none ${colorClass} ${opacityClass ?? ""}`}
+      style={{ left: `${left}%`, width: `${width}%` }}
+      onClick={onClick}
+      title={title}
+    >
+      {width > 4 && label}
+    </div>
+  )
+}
+
+function GanttDiamondMarker({
+  date,
+  rangeStart,
+  totalDays,
+  label,
+  done,
+}: {
+  date: Date; rangeStart: Date; totalDays: number; label: string; done: boolean
+}) {
+  const dayMs = 86_400_000
+  const off = (date.getTime() - rangeStart.getTime()) / dayMs
+  const pct = clamp((off / totalDays) * 100, 0, 100)
+  return (
+    <div
+      className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 flex flex-col items-center"
+      style={{ left: `${pct}%` }}
+      title={label}
+    >
+      <div
+        className={`w-3 h-3 rotate-45 border-2 ${done ? "bg-green-400 border-green-600" : "bg-amber-400 border-amber-600"}`}
+      />
+    </div>
+  )
+}
+
+function GanttTodayLine({
+  today,
+  rangeStart,
+  totalDays,
+}: { today: Date; rangeStart: Date; totalDays: number }) {
+  const dayMs = 86_400_000
+  const off = (today.getTime() - rangeStart.getTime()) / dayMs
+  if (off < 0 || off > totalDays) return null
+  const pct = (off / totalDays) * 100
+  return (
+    <div
+      className="absolute top-0 bottom-0 w-px bg-purple-500/60 pointer-events-none z-10"
+      style={{ left: `${pct}%` }}
+    />
+  )
+}
+
+function GanttTab({ project, tasks, sprints, milestones, onTaskClick }: GanttTabProps) {
+  // Compute range: project start/end, fallback to min/max of tasks & sprints
+  const allDates: Date[] = []
+  if (project.start_date) allDates.push(new Date(project.start_date))
+  if (project.end_date)   allDates.push(new Date(project.end_date))
+  sprints.forEach(s => { allDates.push(new Date(s.start_date)); allDates.push(new Date(s.end_date)) })
+  milestones.forEach(m => { if (m.due_date) allDates.push(new Date(m.due_date)) })
+  tasks.forEach(t => { if (t.due_date) allDates.push(new Date(t.due_date)) })
+
+  const today = new Date(); today.setHours(0, 0, 0, 0)
+
+  let rangeStart = allDates.length > 0
+    ? new Date(Math.min(...allDates.map(d => d.getTime())))
+    : new Date(today.getTime() - 7 * 86_400_000)
+  let rangeEnd = allDates.length > 0
+    ? new Date(Math.max(...allDates.map(d => d.getTime())))
+    : new Date(today.getTime() + 30 * 86_400_000)
+
+  // Pad by 3 days each side
+  rangeStart = new Date(rangeStart.getTime() - 3 * 86_400_000)
+  rangeEnd   = new Date(rangeEnd.getTime()   + 3 * 86_400_000)
+  const totalDays = Math.max(1, (rangeEnd.getTime() - rangeStart.getTime()) / 86_400_000)
+
+  // Build month markers
+  const monthMarkers: { label: string; pct: number }[] = []
+  const PL_MONTHS = ["Sty","Lut","Mar","Kwi","Maj","Cze","Lip","Sie","Wrz","Paź","Lis","Gru"]
+  const cur = new Date(rangeStart.getFullYear(), rangeStart.getMonth(), 1)
+  while (cur <= rangeEnd) {
+    const off = (cur.getTime() - rangeStart.getTime()) / 86_400_000
+    monthMarkers.push({ label: `${PL_MONTHS[cur.getMonth()]} ${cur.getFullYear()}`, pct: (off / totalDays) * 100 })
+    cur.setMonth(cur.getMonth() + 1)
+  }
+
+  // Group tasks
+  const sprintMap: Record<string, Task[]> = {}
+  const backlogTasks: Task[] = []
+  tasks.filter(t => !t.parent_task_id).forEach(t => {
+    if (t.sprint_id) {
+      if (!sprintMap[t.sprint_id]) sprintMap[t.sprint_id] = []
+      sprintMap[t.sprint_id].push(t)
+    } else {
+      backlogTasks.push(t)
+    }
+  })
+
+  const rows: GanttRow[] = [
+    ...sprints.map(s => ({ kind: "sprint" as const, sprint: s, tasks: sprintMap[s.id] ?? [] })),
+    ...(backlogTasks.length > 0 ? [{ kind: "backlog" as const, tasks: backlogTasks }] : []),
+    ...milestones.map(m => ({ kind: "milestone" as const, milestone: m })),
+  ]
+
+  const ROW_H = 40
+  const TASK_H = 28
+  const LABEL_W = 220
+
+  if (tasks.length === 0 && sprints.length === 0 && milestones.length === 0) {
+    return (
+      <div className="flex items-center justify-center h-40 text-muted-foreground text-sm border rounded-lg border-dashed">
+        Brak danych do wyświetlenia wykresu Gantta. Dodaj sprinty, zadania lub kamienie milowe.
+      </div>
+    )
+  }
+
+  return (
+    <div className="overflow-auto border rounded-lg">
+      {/* Header */}
+      <div className="flex sticky top-0 z-20 bg-muted/90 backdrop-blur border-b">
+        <div
+          className="shrink-0 border-r flex items-center px-3 text-xs font-semibold text-muted-foreground"
+          style={{ width: LABEL_W }}
+        >
+          Zakres
+        </div>
+        <div className="relative flex-1 min-w-[600px] h-8">
+          {monthMarkers.map(m => (
+            <span
+              key={m.label}
+              className="absolute text-[10px] text-muted-foreground top-1/2 -translate-y-1/2 pl-1 border-l border-muted"
+              style={{ left: `${m.pct}%` }}
+            >
+              {m.label}
+            </span>
+          ))}
+          <GanttTodayLine today={today} rangeStart={rangeStart} totalDays={totalDays} />
+        </div>
+      </div>
+
+      {/* Rows */}
+      {rows.map((row, ri) => {
+        if (row.kind === "milestone") {
+          const { milestone } = row
+          return (
+            <div key={milestone.id} className="flex border-b hover:bg-muted/20" style={{ height: ROW_H }}>
+              <div
+                className="shrink-0 border-r flex items-center px-3 gap-1.5"
+                style={{ width: LABEL_W }}
+              >
+                <span className="text-amber-500 text-xs">◆</span>
+                <span className="text-xs truncate">{milestone.name}</span>
+                {milestone.is_completed && (
+                  <span className="text-[10px] text-green-600 ml-auto">✓</span>
+                )}
+              </div>
+              <div className="relative flex-1 min-w-[600px]">
+                <GanttTodayLine today={today} rangeStart={rangeStart} totalDays={totalDays} />
+                {milestone.due_date && (
+                  <GanttDiamondMarker
+                    date={new Date(milestone.due_date)}
+                    rangeStart={rangeStart}
+                    totalDays={totalDays}
+                    label={milestone.name}
+                    done={milestone.is_completed}
+                  />
+                )}
+              </div>
+            </div>
+          )
+        }
+
+        if (row.kind === "backlog") {
+          const { tasks: bTasks } = row
+          return (
+            <div key="backlog-group">
+              {/* Backlog header row */}
+              <div className="flex bg-muted/40 border-b" style={{ height: ROW_H }}>
+                <div
+                  className="shrink-0 border-r flex items-center px-3"
+                  style={{ width: LABEL_W }}
+                >
+                  <span className="text-xs font-semibold text-muted-foreground">Backlog</span>
+                </div>
+                <div className="relative flex-1 min-w-[600px]">
+                  <GanttTodayLine today={today} rangeStart={rangeStart} totalDays={totalDays} />
+                </div>
+              </div>
+              {/* Backlog task rows */}
+              {bTasks.map(task => {
+                const tStart = ganttDate(task.created_at, rangeStart.toISOString())
+                const tEnd   = ganttDate(task.due_date,   new Date(tStart.getTime() + 86_400_000).toISOString())
+                return (
+                  <div key={task.id} className="flex border-b hover:bg-muted/10" style={{ height: TASK_H }}>
+                    <div
+                      className="shrink-0 border-r flex items-center px-3 pl-6 gap-1"
+                      style={{ width: LABEL_W }}
+                    >
+                      <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${GANTT_PRIORITY_COLOR[task.priority] ?? "bg-gray-300"}`} />
+                      <span className="text-xs truncate text-muted-foreground">{task.title}</span>
+                    </div>
+                    <div className="relative flex-1 min-w-[600px]">
+                      <GanttTodayLine today={today} rangeStart={rangeStart} totalDays={totalDays} />
+                      <GanttBar
+                        start={tStart} end={tEnd}
+                        rangeStart={rangeStart} totalDays={totalDays}
+                        label={task.title}
+                        colorClass={GANTT_PRIORITY_COLOR[task.priority] ?? "bg-gray-300"}
+                        opacityClass={GANTT_STATUS_OPACITY[task.status]}
+                        onClick={() => onTaskClick(task)}
+                        title={`${task.title} · ${task.priority} · ${task.status}`}
+                      />
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )
+        }
+
+        // kind === "sprint"
+        const { sprint, tasks: sTasks } = row
+        const sprintStart = new Date(sprint.start_date)
+        const sprintEnd   = new Date(sprint.end_date)
+        const sprintColorClass = sprint.status === "active" ? "bg-purple-500" : sprint.status === "completed" ? "bg-green-500" : "bg-slate-400"
+
+        return (
+          <div key={sprint.id}>
+            {/* Sprint header row */}
+            <div className="flex bg-muted/40 border-b" style={{ height: ROW_H }}>
+              <div
+                className="shrink-0 border-r flex items-center px-3 gap-1.5"
+                style={{ width: LABEL_W }}
+              >
+                <span className="text-xs font-semibold truncate">{sprint.name}</span>
+                <span className={`text-[10px] px-1.5 py-0.5 rounded-full text-white ml-auto ${sprintColorClass}`}>
+                  {sprint.status === "active" ? "Aktywny" : sprint.status === "completed" ? "Ukończony" : "Plan."}
+                </span>
+              </div>
+              <div className="relative flex-1 min-w-[600px]">
+                <GanttTodayLine today={today} rangeStart={rangeStart} totalDays={totalDays} />
+                <GanttBar
+                  start={sprintStart} end={sprintEnd}
+                  rangeStart={rangeStart} totalDays={totalDays}
+                  label={sprint.name}
+                  colorClass={`${sprintColorClass} opacity-30`}
+                  title={`${sprint.name} · ${sprint.start_date} → ${sprint.end_date}`}
+                />
+              </div>
+            </div>
+            {/* Sprint task rows */}
+            {sTasks.map(task => {
+              const tStart = ganttDate(task.created_at, sprint.start_date)
+              const tEnd   = ganttDate(task.due_date,   sprint.end_date)
+              return (
+                <div key={task.id} className="flex border-b hover:bg-muted/10" style={{ height: TASK_H }}>
+                  <div
+                    className="shrink-0 border-r flex items-center px-3 pl-6 gap-1"
+                    style={{ width: LABEL_W }}
+                  >
+                    <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${GANTT_PRIORITY_COLOR[task.priority] ?? "bg-gray-300"}`} />
+                    <span className="text-xs truncate text-muted-foreground">{task.title}</span>
+                  </div>
+                  <div className="relative flex-1 min-w-[600px]">
+                    <GanttTodayLine today={today} rangeStart={rangeStart} totalDays={totalDays} />
+                    <GanttBar
+                      start={tStart} end={tEnd}
+                      rangeStart={rangeStart} totalDays={totalDays}
+                      label={task.title}
+                      colorClass={GANTT_PRIORITY_COLOR[task.priority] ?? "bg-gray-300"}
+                      opacityClass={GANTT_STATUS_OPACITY[task.status]}
+                      onClick={() => onTaskClick(task)}
+                      title={`${task.title} · ${task.priority} · ${task.status}`}
+                    />
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 interface Props {
@@ -1341,6 +1691,7 @@ export function ProjectDetailClient({
           <TabsTrigger value="kanban">Kanban</TabsTrigger>
           <TabsTrigger value="sprints">Sprinty</TabsTrigger>
           <TabsTrigger value="milestones">Kamienie milowe</TabsTrigger>
+          <TabsTrigger value="gantt">Gantt</TabsTrigger>
           <TabsTrigger value="members">Członkowie</TabsTrigger>
         </TabsList>
 
@@ -1374,6 +1725,16 @@ export function ProjectDetailClient({
 
         <TabsContent value="milestones" className="mt-4">
           <MilestonesTab milestones={milestones} onToggle={handleMilestoneToggle} />
+        </TabsContent>
+
+        <TabsContent value="gantt" className="mt-4">
+          <GanttTab
+            project={project}
+            tasks={tasks}
+            sprints={sprints}
+            milestones={milestones}
+            onTaskClick={setSelectedTask}
+          />
         </TabsContent>
 
         <TabsContent value="members" className="mt-4">

@@ -41,6 +41,13 @@ export async function updateSession(request: NextRequest) {
 
   const isPlatformRoute = pathname.startsWith('/platform')
 
+  // Root redirect: logged in → platform, logged out → login
+  if (pathname === '/') {
+    const dest = request.nextUrl.clone()
+    dest.pathname = user ? '/platform/dashboard' : '/login'
+    return NextResponse.redirect(dest)
+  }
+
   // Unauthenticated user tries to access platform
   if (!user && isPlatformRoute) {
     const loginUrl = request.nextUrl.clone()

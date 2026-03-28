@@ -120,10 +120,12 @@ export async function moveTaskToSprint(taskId: string, sprintId: string | null, 
 // ─── Task actions ──────────────────────────────────────────────────────────────
 
 const updateTaskSchema = z.object({
-  id:          z.string().uuid(),
+  id:          z.string(),
+  projectId:   z.string().optional(),
+  title:       z.string().optional(),
   status:      z.string().optional(),
   priority:    z.string().optional(),
-  sprint_id:   z.string().uuid().nullable().optional(),
+  sprint_id:   z.string().nullable().optional(),
   due_date:    z.string().nullable().optional(),
   description: z.string().nullable().optional(),
 })
@@ -133,9 +135,9 @@ export async function updateTask(input: z.infer<typeof updateTaskSchema>) {
   if (!parsed.success) return { data: null, error: "Nieprawidłowe dane" }
 
   const supabase = await createClient()
-  const { id, ...updates } = parsed.data
+  const { id, projectId, ...updates } = parsed.data
 
-  // Remove undefined values
+  // Remove undefined values and non-DB fields
   const cleanUpdates = Object.fromEntries(
     Object.entries(updates).filter(([, v]) => v !== undefined)
   )
@@ -269,4 +271,120 @@ export async function createSubtask(
   if (error) return { data: null, error: error.message }
   revalidateProject(projectId)
   return { data, error: null }
+}
+
+// ─── Template actions ──────────────────────────────────────────────────────────
+
+const TemplateTaskSchema = z.object({
+  title:           z.string().min(1),
+  priority:        z.enum(["urgent", "high", "medium", "low"]).default("medium"),
+  role_assignment: z.string().optional(),
+  days_from_start: z.number().int().default(0),
+  order_index:     z.number().int(),
+})
+
+const CreateTemplateSchema = z.object({
+  name:        z.string().min(1),
+  description: z.string().optional(),
+  tasks:       z.array(TemplateTaskSchema).optional(),
+})
+
+export async function createTemplate(input: z.infer<typeof CreateTemplateSchema>) {
+  const { supabase, companyId } = await getUserCompany()
+  if (!companyId) return { data: null, error: "Brak firmy" }
+
+  const parsed = CreateTemplateSchema.safeParse(input)
+  if (!parsed.success) return { data: null, error: parsed.error.message }
+
+  const { name, description, tasks = [] } = parsed.data
+
+  const { data: template, error: tplError } = await (supabase as any)
+    .from("project_templates")
+    .insert({ company_id: companyId, name, description: description ?? null })
+    .select()
+    .single()
+
+  if (tplError) return { data: null, error: tplError.message }
+
+  if (tasks.length > 0) {
+    const rows = tasks.map(t => ({ ...t, template_id: template.id }))
+    await (supabase as any).from("project_template_tasks").insert(rows)
+  }
+
+  revalidatePath("/platform/settings/project-hub")
+  return { data: template, error: null }
+}
+
+export async function deleteTemplate(templateId: string) {
+  const { supabase, companyId } = await getUserCompany()
+  if (!companyId) return { error: "Brak firmy" }
+
+  const { error } = await (supabase as any)
+    .from("project_templates")
+    .delete()
+    .eq("id", templateId)
+    .eq("company_id", companyId)
+
+  if (error) return { error: error.message }
+  revalidatePath("/platform/settings/project-hub")
+  return { error: null }
+}
+
+export async function updateTemplate(templateId: string, name: string, description: string) {
+  const { supabase, companyId } = await getUserCompany()
+  if (!companyId) return { error: "Brak firmy" }
+
+  const { error } = await (supabase as any)
+    .from("project_templates")
+    .update({ name, description })
+    .eq("id", templateId)
+    .eq("company_id", companyId)
+
+  if (error) return { error: error.message }
+  revalidatePath("/platform/settings/project-hub")
+  return { error: null }
+}
+
+export async function addTemplateTask(
+  templateId: string,
+  input: { title: string; priority?: string; role_assignment?: string; days_from_start?: number },
+) {
+  const { supabase, companyId } = await getUserCompany()
+  if (!companyId) return { error: "Brak firmy" }
+
+  const { data: existing } = await (supabase as any)
+    .from("project_template_tasks")
+    .select("order_index")
+    .eq("template_id", templateId)
+    .order("order_index", { ascending: false })
+    .limit(1)
+
+  const nextOrder = (existing?.[0]?.order_index ?? 0) + 1
+
+  const { error } = await (supabase as any)
+    .from("project_template_tasks")
+    .insert({
+      template_id:     templateId,
+      title:           input.title,
+      priority:        input.priority ?? "medium",
+      role_assignment: input.role_assignment ?? null,
+      days_from_start: input.days_from_start ?? 0,
+      order_index:     nextOrder,
+    })
+
+  if (error) return { error: error.message }
+  revalidatePath("/platform/settings/project-hub")
+  return { error: null }
+}
+
+export async function deleteTemplateTask(taskId: string) {
+  const { supabase } = await getUserCompany()
+  const { error } = await (supabase as any)
+    .from("project_template_tasks")
+    .delete()
+    .eq("id", taskId)
+
+  if (error) return { error: error.message }
+  revalidatePath("/platform/settings/project-hub")
+  return { error: null }
 }

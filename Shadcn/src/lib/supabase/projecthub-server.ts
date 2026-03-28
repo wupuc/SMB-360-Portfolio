@@ -152,6 +152,90 @@ export async function fetchMilestones(projectId: string): Promise<Milestone[]> {
   return (data ?? []) as Milestone[]
 }
 
+export async function fetchTaskById(taskId: string): Promise<Task | null> {
+  const supabase = await createClient()
+  const { data } = await supabase
+    .from("tasks")
+    .select("*, project:projects(name), assignees:task_assignees(user:users(id,first_name,last_name))")
+    .eq("id", taskId)
+    .single()
+  return (data ?? null) as Task | null
+}
+
+export async function fetchTaskComments(taskId: string): Promise<{ id: string; body: string; created_at: string; author: { first_name: string; last_name: string } | null }[]> {
+  const supabase = await createClient()
+  const { data } = await supabase
+    .from("task_comments")
+    .select("id, body, created_at, author:users(first_name,last_name)")
+    .eq("task_id", taskId)
+    .order("created_at", { ascending: true })
+  return (data ?? []) as any[]
+}
+
+export async function fetchSubtasks(parentTaskId: string): Promise<Task[]> {
+  const supabase = await createClient()
+  const { data } = await supabase
+    .from("tasks")
+    .select("*, assignees:task_assignees(user:users(first_name,last_name))")
+    .eq("parent_task_id", parentTaskId)
+    .order("created_at", { ascending: true })
+  return (data ?? []) as Task[]
+}
+
+// ─── Workload types ───────────────────────────────────────────────────────────
+
+export type WorkloadUser = {
+  id: string
+  first_name: string
+  last_name: string
+  role: string
+}
+
+export type WorkloadTask = {
+  id: string
+  title: string
+  priority: string
+  status: string
+  due_date: string
+  estimated_hours: number | null
+  project_name: string | null
+  user_id: string
+}
+
+export async function fetchWorkloadData(): Promise<{ users: WorkloadUser[]; tasks: WorkloadTask[] }> {
+  const supabase = await createClient()
+
+  const [usersRes, tasksRes] = await Promise.all([
+    supabase.from("users").select("id, first_name, last_name, role").order("first_name"),
+    supabase
+      .from("task_assignees")
+      .select("user_id, task:tasks(id, title, priority, status, due_date, estimated_hours, project:projects(name))")
+      .not("task.due_date", "is", null)
+      .not("task.status", "in", "(done,cancelled)"),
+  ])
+
+  const users: WorkloadUser[] = (usersRes.data ?? []) as WorkloadUser[]
+
+  const tasks: WorkloadTask[] = (tasksRes.data ?? [])
+    .map((row: any) => {
+      const t = row.task
+      if (!t || !t.due_date) return null
+      return {
+        id:             t.id,
+        title:          t.title,
+        priority:       t.priority,
+        status:         t.status,
+        due_date:       t.due_date,
+        estimated_hours: t.estimated_hours ?? null,
+        project_name:   t.project?.name ?? null,
+        user_id:        row.user_id,
+      } as WorkloadTask
+    })
+    .filter(Boolean) as WorkloadTask[]
+
+  return { users, tasks }
+}
+
 export async function fetchOwners(): Promise<Owner[]> {
   const supabase = await createClient()
   const { data } = await supabase

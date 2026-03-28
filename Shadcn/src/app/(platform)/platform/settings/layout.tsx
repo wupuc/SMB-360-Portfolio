@@ -15,6 +15,7 @@ const navItems = [
   { title: 'Język',       href: '/platform/settings/language' },
   { title: 'Request Flow',href: '/platform/settings/request-flow' },
   { title: 'Sales Track', href: '/platform/settings/sales-track' },
+  { title: 'Project Hub', href: '/platform/settings/project-hub' },
 ]
 
 interface Props {

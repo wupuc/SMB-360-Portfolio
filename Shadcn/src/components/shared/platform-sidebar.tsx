@@ -18,7 +18,6 @@ import {
   Building2,
   BookOpen,
   AlertCircle,
-  Clock,
   Target,
   Book,
   MapPin,
@@ -28,7 +27,6 @@ import {
   LineChart,
   PieChart,
 } from "lucide-react"
-import { cn } from "@/lib/utils"
 import {
   Sidebar,
   SidebarContent,
@@ -37,9 +35,6 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
-  SidebarMenuSub,
-  SidebarMenuSubButton,
-  SidebarMenuSubItem,
   SidebarRail,
 } from "@/components/ui/sidebar"
 import { ModuleSwitcher } from "@/components/shared/module-switcher"
@@ -78,6 +73,7 @@ const MODULE_NAV: Record<ModuleKey | "platform", NavItem[]> = {
     { title: "My Tasks", href: "/platform/project-hub/my-tasks", icon: CheckSquare },
     { title: "Projects", href: "/platform/project-hub/projects", icon: Kanban },
     { title: "Team Workload", href: "/platform/project-hub/workload", icon: Users },
+    { title: "Raporty", href: "/platform/project-hub/reports", icon: BarChart2 },
   ],
   people_hub: [
     { title: "Dashboard", href: "/platform/people-hub", icon: LayoutDashboard },
